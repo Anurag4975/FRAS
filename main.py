@@ -3,15 +3,16 @@ import cv2
 import sqlite3
 import os
 import face_recognition as fr
-from datetime import datetime
+import datetime
 import numpy as np
+from tkcalendar import *
 
 
 pathlib = '/home/babayega/Documents/images'
 root = Tk()
 root.geometry("720x600")
 root.title("FRAS")
-root.resizable(0,0)
+root.resizable(0, 0)
 
 my_menu = Menu(root)
 root.config(menu=my_menu)
@@ -28,6 +29,41 @@ year integer
 
 )""")
 '''
+
+def S_Attendance():
+    today = datetime.date.today()
+    Top1 = Toplevel()
+    Top1.geometry('720x600')
+    Label(Top1, text="Pick a Date to View Attendance",font=("Arial", 18) ).grid(row=0,column=0)
+    Label(Top1, text="TO view Specific Student Attendance.").grid(row=6,column=0)
+    Label(Top1, text="Name\t\tDate").place(x=400,y=10)
+
+
+
+
+
+    def show_attendance():
+        conn = sqlite3.connect("Attendance.db")
+        c = conn.cursor()
+        d=str(cal.get_date())
+        c.execute(f"SELECT * FROM ATTENDANCE WHERE date={d} ORDER BY name ASC")
+        rcd = set(c.fetchall())
+        print(cal.get_date())
+        print_rec = " "
+        for i in rcd:
+            print_rec += str(i[0]) + " \t " + str(i[1] / 10000)[:7] + "." + str(i[1])[-2:] + "\n"
+        label = Label(Top1,text=print_rec).place(x=400,y=40)
+        print(print_rec)
+
+
+
+    cal = Calendar(Top1, selectmode="day", year=today.year, month=today.month, day=today.day, date_pattern="yyyymmdd",height=100,width=100)
+    cal.grid(row=1,column=0)
+    btn= Button(Top1,text="SHOW ATTENDANCE",command=show_attendance).grid(row=5,column=0)
+
+
+
+
 # code of Face  Recognition is been placed here
 def fras():
     images = []
@@ -49,16 +85,27 @@ def fras():
         return encList
 
     def Attendance(name):
-        with open('Attendance_Register.csv', 'r+') as f:
-            DataList = f.readlines()
-            names = []
-            for data in DataList:
-                ent = data.split(',')
-                names.append(ent[0])
-            if name not in names:
-                curr = datetime.now()
-                dt = curr.strftime('%H:%M:%S')
-                f.writelines(f'\n{name},{dt}')
+        today  = str(datetime.date.today())
+        t_date = "".join(today.split("-"))
+        m=[(name,t_date)]
+        conn = sqlite3.connect("Attendance.db")
+        c = conn.cursor()
+        c.execute("SELECT * FROM ATTENDANCE WHERE name =(?) AND DATE=(?)",(name,t_date))
+        print(c.fetchone())
+        if c.fetchone() == None:
+            c.execute("INSERT INTO ATTENDANCE VALUES(?,?)",(name,t_date))
+            print("INSERTED SUCESSFULLY")
+        print(c.fetchone())
+        # d=int(c.fetchall()[-1][1])
+        # e=int(t_date)
+        # if d!=e :
+        #      c.execute("INSERT INTO ATTENDANCE VALUES(?,?)",(name,t_date))
+        # c.execute("SELECT * FROM ATTENDANCE")
+        conn.commit()
+        conn.close()
+
+
+
 
 
     encodeKnown = DbEncodings(images)
@@ -74,13 +121,19 @@ def fras():
             matchList = fr.compare_faces(encodeKnown, encFace)
             faceDist = fr.face_distance(encodeKnown, encFace)
             match = np.argmin(faceDist)
-            if matchList[match]:
+            if np.min(faceDist)>0.4:
+                y1, x2, y2, x1 = faceLoc
+                y1, x2, y2, x1 = y1 * 4, x2 * 4, y2 * 4, x1 * 4
+                cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 255), 2)
+                cv2.rectangle(img, (x1, y2 - 35), (x2, y2), (255, 0, 255), cv2.FILLED)
+                cv2.putText(img, "Unknown", (x1 + 6, y2 + 6), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+            elif matchList[match]:
                 name = Names[match].upper()
                 Attendance(name)
                 y1, x2, y2, x1 = faceLoc
                 y1, x2, y2, x1 = y1 * 4, x2 * 4, y2 * 4, x1 * 4
                 cv2.rectangle(img, (x1, y1), (x2, y2), (0, 255, 255), 2)
-                cv2.rectangle(img, (x1, y2 - 35), (x2, y2), (0, 255, 255), cv2.FILLED)
+                cv2.rectangle(img, (x1, y2 - 35), (x2, y2), (0, 0, 255), cv2.FILLED)
                 cv2.putText(img, name, (x1 + 6, y2 + 6), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
 
         cv2.imshow('webcam', img)
@@ -93,6 +146,7 @@ def fras():
 def Del_rec():
     top =Toplevel()
     def delete():
+        d=str(d_box.get()).upper()
         if len(d_box.get()) == 0:
             l=Label(top,text = "Please Enter OID. To view OID Please Visit Show Records Page").grid(row=3,column=0,columnspan=2, pady=10, padx=10,
                                                                    ipadx=100)
@@ -100,8 +154,8 @@ def Del_rec():
         c = conn.cursor()
 
         # delete A record
-        c.execute("DELETE from details WHERE oid="
-                  + d_box.get())
+        c.execute(f"DELETE from details WHERE class_id='{d}'"
+                  )
 
         conn.commit()
         conn.close()
@@ -116,7 +170,7 @@ def Del_rec():
 #showing Student details
 def show():
     top1 = Toplevel()
-    l2 = Label(top1,text = "F_Name\t\tL_Name \t\tC_id\t\tBranch\t\tYear\t\tOID",font=('Helvetica 9 bold')).grid(row=0,column=0)
+    l2 = Label(top1,text = "F_Name\t\tL_Name \t\tC_id\t\tBranch\t\tYear",font=('Helvetica 9 bold')).grid(row=0,column=0)
     conn = sqlite3.connect('student.db')
     c = conn.cursor()
     c.execute("SELECT *,oid FROM details")
@@ -125,7 +179,7 @@ def show():
     print(rcd)
     print_records = " "
     for r in rcd:
-        print_records +=str(r[0]) +"\t\t" + str(r[1]) + "\t\t" +str(r[2])+ "\t" +str(r[3])+"\t\t"+str(r[4])+" \t\t" +str(r[5]) + "\n"
+        print_records +=str(r[0]) +"\t\t" + str(r[1]) + "\t\t" +str(r[2])+ "\t" +str(r[3])+"\t\t"+str(r[4]) + "\n"
     showrec = Label(top1, text=print_records).grid(row=1, column=0)
     # print(len(print_records))
     if len(print_records) == 1:
@@ -233,6 +287,7 @@ edit_menu.add_command(label="Del_Records",command=Del_rec)
 # show Menu
 my_menu.add_cascade(label="SHOW",menu=show_menu)
 show_menu.add_command(label="Student Details",command = show)
+show_menu.add_command(label="Student Attendance",command=S_Attendance)
 
 
 L1 = Label(root, text="Facial Attendance System ",font= ('Arial',25)).pack(fill='x')
